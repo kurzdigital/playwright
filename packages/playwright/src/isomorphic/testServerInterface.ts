@@ -106,6 +106,10 @@ export interface TestServerInterface {
     status: reporterTypes.FullResult['status'];
   }>;
 
+  acceptSnapshots(param: { paths: [string, string][]}): Promise<{
+    status: boolean;
+  }>;
+
   findRelatedTestFiles(params: {
     files: string[];
   }): Promise<{ testFiles: string[]; errors?: reporterTypes.TestError[]; }>;

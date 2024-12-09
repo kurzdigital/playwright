@@ -40,6 +40,7 @@ import { InternalReporter } from '../reporters/internalReporter';
 import type { ReporterV2 } from '../reporters/reporterV2';
 import { internalScreen } from '../reporters/base';
 import { addGitCommitInfoPlugin } from '../plugins/gitCommitInfoPlugin';
+import { copyFile } from 'node:fs/promises';
 
 const originalStdoutWrite = process.stdout.write;
 const originalStderrWrite = process.stderr.write;
@@ -125,6 +126,13 @@ export class TestServerDispatcher implements TestServerInterface {
   }
 
   async ping() {}
+
+  async acceptSnapshots(params: Parameters<TestServerInterface['acceptSnapshots']>[0]): ReturnType<TestServerInterface['acceptSnapshots']> {
+    for (const path of params.paths)
+      await copyFile(...path);
+
+    return { status: true };
+  }
 
   async open(params: Parameters<TestServerInterface['open']>[0]): ReturnType<TestServerInterface['open']> {
     if (isUnderTest())

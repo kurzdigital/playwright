@@ -304,6 +304,18 @@ export const UIModeView: React.FC<{}> = ({
     });
   }, [projectFilters, isRunningTest, testModel, testServerConnection, singleWorker, showBrowser, updateSnapshots]);
 
+  const acceptSnapshots = React.useCallback((paths: [string, string][]) => {
+
+    if (!testServerConnection || !testModel)
+      return;
+
+    commandQueue.current = commandQueue.current.then(async () => {
+      await testServerConnection.acceptSnapshots({
+        paths,
+      });
+    });
+  }, [testModel, testServerConnection]);
+
   React.useEffect(() => {
     if (!testServerConnection || !teleSuiteUpdater)
       return;
@@ -487,6 +499,7 @@ export const UIModeView: React.FC<{}> = ({
           testServerConnection={testServerConnection}
           runningState={runningState}
           runTests={runTests}
+          acceptSnapshots={acceptSnapshots}
           onItemSelected={setSelectedItem}
           watchAll={watchAll}
           watchedTreeIds={watchedTreeIds}

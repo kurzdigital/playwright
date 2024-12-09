@@ -31,6 +31,7 @@ import './uiModeTestListView.css';
 import type { TestServerConnection } from '@testIsomorphic/testServerConnection';
 import { TagView } from './tag';
 import type { TeleSuiteUpdaterTestModel } from '@testIsomorphic/teleSuiteUpdater';
+import type { ExpectError } from 'playwright/src/matchers/matcherHint';
 
 const TestTreeView = TreeView<TreeItem>;
 
@@ -40,6 +41,7 @@ export const TestListView: React.FC<{
   testServerConnection: TestServerConnection | undefined,
   testModel?: TeleSuiteUpdaterTestModel,
   runTests: (mode: 'bounce-if-busy' | 'queue-if-busy', testIds: Set<string>) => void,
+  acceptSnapshots: (paths: [string, string][]) => void,
   runningState?: { testIds: Set<string>, itemSelectedByUser?: boolean, completed?: boolean },
   watchAll: boolean,
   watchedTreeIds: { value: Set<string> },
@@ -50,7 +52,7 @@ export const TestListView: React.FC<{
   requestedExpandAllCount: number,
   setFilterText: (text: string) => void,
   onRevealSource: () => void,
-}> = ({ filterText, testModel, testServerConnection, testTree, runTests, runningState, watchAll, watchedTreeIds, setWatchedTreeIds, isLoading, onItemSelected, requestedCollapseAllCount, requestedExpandAllCount, setFilterText, onRevealSource }) => {
+}> = ({ filterText, testModel, testServerConnection, testTree, runTests, acceptSnapshots, runningState, watchAll, watchedTreeIds, setWatchedTreeIds, isLoading, onItemSelected, requestedCollapseAllCount, requestedExpandAllCount, setFilterText, onRevealSource }) => {
   const [treeState, setTreeState] = React.useState<TreeState>({ expandedItems: new Map() });
   const [selectedTreeItemId, setSelectedTreeItemId] = React.useState<string | undefined>();
   const [collapseAllCount, setCollapseAllCount] = React.useState(requestedCollapseAllCount);
@@ -142,6 +144,28 @@ export const TestListView: React.FC<{
     runTests('bounce-if-busy', testTree.collectTestIds(treeItem));
   };
 
+  const acceptTreeItemSnapshots = (treeItem: TreeItem) => {
+    setSelectedTreeItemId(treeItem.id);
+
+    const updates: [string, string][] = [];
+
+    const testIds = testTree.collectTestIds(treeItem);
+    for (const test of testModel!.rootSuite.allTests()) {
+      if (testIds.has(test.id)) {
+        for (const result of test.results) {
+          if (result.errors) {
+            for (const error of result.errors) {
+              const result = (error as ExpectError).matcherResult;
+              if (result)
+                updates.push([result.actual as string, result.expected as string]);
+            }
+          }
+        }
+      }
+    }
+    acceptSnapshots(updates);
+  };
+
   const handleTagClick = (e: React.MouseEvent, tag: string) => {
     e.preventDefault();
     e.stopPropagation();
@@ -175,6 +199,7 @@ export const TestListView: React.FC<{
         {!!treeItem.duration && treeItem.status !== 'skipped' && <div id={timeId} className='ui-mode-tree-item-time'>{msToString(treeItem.duration)}</div>}
         <Toolbar noMinHeight={true} noShadow={true}>
           <ToolbarButton icon='play' title='Run' onClick={() => runTreeItem(treeItem)} disabled={!!runningState && !runningState.completed}></ToolbarButton>
+          <ToolbarButton icon='clippy' title='Accept snapshots' onClick={() => acceptTreeItemSnapshots(treeItem)} disabled={treeItem.status !== 'failed'}></ToolbarButton>
           <ToolbarButton icon='go-to-file' title='Show source' onClick={onRevealSource} style={(treeItem.kind === 'group' && treeItem.subKind === 'folder') ? { visibility: 'hidden' } : {}}></ToolbarButton>
           {!watchAll && <ToolbarButton icon='eye' title='Watch' onClick={() => {
             if (watchedTreeIds.value.has(treeItem.id))
