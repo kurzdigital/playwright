@@ -105,6 +105,7 @@ export const UIModeView: React.FC<{}> = ({
   const [settingsVisible, setSettingsVisible] = React.useState(false);
   const [testingOptionsVisible, setTestingOptionsVisible] = React.useState(false);
   const [revealSource, setRevealSource] = React.useState(false);
+  const [statusMessage, setStatusMessage] = React.useState<{ text: string, type: 'info' | 'error' } | undefined>();
   const onRevealSource = React.useCallback(() => setRevealSource(true), [setRevealSource]);
 
   const [singleWorker, setSingleWorker] = useSetting<boolean>('single-worker', false);
@@ -317,15 +318,25 @@ export const UIModeView: React.FC<{}> = ({
     if (!testServerConnection || !testModel)
       return;
 
+    // Show immediate feedback
+    setStatusMessage({ text: `Accepting ${paths.length} snapshot(s)...`, type: 'info' });
+
     // Don't use commandQueue - execute immediately to allow accepting snapshots while tests run
     try {
       const result = await testServerConnection.acceptSnapshots({ paths });
+
+      if (result.failed > 0)
+        setStatusMessage({ text: `Accepted ${result.accepted} snapshot(s), failed: ${result.failed}`, type: 'error' });
+      else
+        setStatusMessage({ text: `Accepted ${result.accepted} snapshot(s)`, type: 'info' });
+
       // Log errors for debugging
       if (result.errors?.length) {
         // eslint-disable-next-line no-console
         result.errors.forEach(err => console.error(err));
       }
     } catch (error) {
+      setStatusMessage({ text: `Failed to accept snapshots: ${error}`, type: 'error' });
       // eslint-disable-next-line no-console
       console.error('Accept snapshots error:', error);
     }
@@ -361,6 +372,14 @@ export const UIModeView: React.FC<{}> = ({
       return;
     await acceptSnapshots(paths);
   }, [collectAllSnapshotPaths, acceptSnapshots]);
+
+  // Auto-clear status message after 3 seconds
+  React.useEffect(() => {
+    if (!statusMessage)
+      return;
+    const timeout = setTimeout(() => setStatusMessage(undefined), 3000);
+    return () => clearTimeout(timeout);
+  }, [statusMessage]);
 
   React.useEffect(() => {
     if (!testServerConnection || !teleSuiteUpdater)
@@ -553,6 +572,25 @@ export const UIModeView: React.FC<{}> = ({
             setExpandAllCount(expandAllCount + 1);
           }} />
         </Toolbar>
+        {statusMessage && <div
+          onClick={() => setStatusMessage(undefined)}
+          style={{
+            position: 'absolute',
+            top: '10px',
+            left: '10px',
+            zIndex: 1000,
+            padding: '6px 10px',
+            fontSize: '11px',
+            backgroundColor: statusMessage.type === 'error' ? 'var(--vscode-inputValidation-errorBackground)' : 'var(--vscode-inputValidation-infoBackground)',
+            color: statusMessage.type === 'error' ? 'var(--vscode-inputValidation-errorForeground)' : 'var(--vscode-inputValidation-infoForeground)',
+            border: statusMessage.type === 'error' ? '1px solid var(--vscode-inputValidation-errorBorder)' : '1px solid var(--vscode-inputValidation-infoBorder)',
+            borderRadius: '3px',
+            boxShadow: '0 2px 6px rgba(0, 0, 0, 0.15)',
+            cursor: 'pointer',
+            maxWidth: '300px',
+          }}>
+          {statusMessage.text}
+        </div>}
         <TestListView
           filterText={filterText}
           testModel={testModel}
