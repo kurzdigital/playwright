@@ -313,6 +313,55 @@ export const UIModeView: React.FC<{}> = ({
 
   const runVisibleTests = React.useCallback(() => runTests('bounce-if-busy', testTree.collectTestIds(testTree.rootItem)), [runTests, testTree]);
 
+  const acceptSnapshots = React.useCallback(async (paths: [string, string][]) => {
+    if (!testServerConnection || !testModel)
+      return;
+
+    // Don't use commandQueue - execute immediately to allow accepting snapshots while tests run
+    try {
+      const result = await testServerConnection.acceptSnapshots({ paths });
+      // Log errors for debugging
+      if (result.errors?.length) {
+        // eslint-disable-next-line no-console
+        result.errors.forEach(err => console.error(err));
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Accept snapshots error:', error);
+    }
+  }, [testModel, testServerConnection]);
+
+  const collectAllSnapshotPaths = React.useCallback((): [string, string][] => {
+    if (!testModel)
+      return [];
+
+    const updates: [string, string][] = [];
+    for (const test of testModel.rootSuite.allTests()) {
+      for (const result of test.results) {
+        if (result.errors && result.errors.length > 0) {
+          // Collect paths from attachments
+          for (const attachment of result.attachments) {
+            if (attachment.name.includes('-actual.') && attachment.path) {
+              const baseName = attachment.name.replace('-actual.', '-expected.');
+              const expectedAttachment = result.attachments.find(a => a.name === baseName);
+              if (expectedAttachment?.path) {
+                updates.push([attachment.path, expectedAttachment.path]);
+              }
+            }
+          }
+        }
+      }
+    }
+    return updates;
+  }, [testModel]);
+
+  const acceptAllSnapshots = React.useCallback(async () => {
+    const paths = collectAllSnapshotPaths();
+    if (paths.length === 0)
+      return;
+    await acceptSnapshots(paths);
+  }, [collectAllSnapshotPaths, acceptSnapshots]);
+
   React.useEffect(() => {
     if (!testServerConnection || !teleSuiteUpdater)
       return;
@@ -496,6 +545,7 @@ export const UIModeView: React.FC<{}> = ({
             setWatchedTreeIds({ value: new Set() });
             setWatchAll(!watchAll);
           }}></ToolbarButton>
+          {collectAllSnapshotPaths().length > 0 && <ToolbarButton icon='check' title='Accept all snapshots' onClick={acceptAllSnapshots}></ToolbarButton>}
           <ToolbarButton icon='collapse-all' title='Collapse all' onClick={() => {
             setCollapseAllCount(collapseAllCount + 1);
           }} />
@@ -510,6 +560,7 @@ export const UIModeView: React.FC<{}> = ({
           testServerConnection={testServerConnection}
           runningState={runningState}
           runTests={runTests}
+          acceptSnapshots={acceptSnapshots}
           onItemSelected={setSelectedItem}
           watchAll={watchAll}
           watchedTreeIds={watchedTreeIds}
